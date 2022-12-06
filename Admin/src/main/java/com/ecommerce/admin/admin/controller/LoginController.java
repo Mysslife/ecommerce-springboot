@@ -4,6 +4,7 @@ import com.ecommerce.library.dto.AdminDto;
 import com.ecommerce.library.model.Admin;
 import com.ecommerce.library.service.impl.AdminServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -20,13 +21,17 @@ public class LoginController {
     @Autowired
     private AdminServiceImpl adminServiceImpl;
 
+    @Autowired
+    private BCryptPasswordEncoder passwordEncoder;
+
     @GetMapping("/login")
     public String loginForm() {
         return "login";
     }
 
     @GetMapping("/register")
-    public String register(Model model) {
+    public String register(Model model, HttpSession session) {
+        session.removeAttribute("message");
         model.addAttribute("adminDto", new AdminDto()); // vào trang /register -> sau đó tạo ra đối tượng (model) adminDto với value các thuộc tính = undefinded. Sau đó, khi submit, sẽ nhận được value theo các trường tương ứng khi user nhập vào và submit
         return "register";
     }
@@ -39,45 +44,41 @@ public class LoginController {
     @PostMapping("/register-new") // như ở trên, khi vào trang /register -> tạo ra đối tượng (model) adminDto rỗng, sau đó user nhập value, submit thì sẽ nhận được value các trường thuộc tính tương ứng
     // @Valid để validation
     // @ModelAttribute để lấy được model tương ứng (ở đây là adminDto) khi vào trang /register (ở method get /register). Và vì là đối tượng AdminDto nên kiểu dữ liệu cũng phải là AdminDto
-    // RedirectAttributes để truyền value từ trang này sang trang khác khi thực hiện redirect
+    // HttpSession session để truyền value từ trang này sang trang khác khi thực hiện redirect
     public String addNewAdmin(@Valid @ModelAttribute("adminDto")AdminDto adminDto,
                               BindingResult result, // binding error text message với field password, username, .... trong class AdminDto (@Size(min = 3, max = 10, message = "Invalid last name! (3-10 characters)")
                               Model model,
-                              RedirectAttributes redirectAttributes,
                               HttpSession session) {
        try {
+           session.removeAttribute("message");
            if(result.hasErrors()) {
                model.addAttribute("adminDto", adminDto);
                result.toString();
-               System.out.println("Error");
-               return "redirect:/register";
+               return "register";
            }
 
            String username = adminDto.getUsername();
            Admin admin = adminServiceImpl.findByUsername(username);
            if(admin != null) {
                model.addAttribute("adminDto", adminDto);
-               redirectAttributes.addFlashAttribute("message", "Your email has been registered!");
-               System.out.println("Admin not null");
-               return "redirect:/register";
+               session.setAttribute("message", "Your email has been registered!");
+               return "register";
            }
 
            if(adminDto.getPassword().equals(adminDto.getRepeatPassword())) {
+               adminDto.setPassword(passwordEncoder.encode(adminDto.getPassword()));
                adminServiceImpl.save(adminDto);
-               System.out.println("success");
+               session.setAttribute("message", "Register successfully!");
                model.addAttribute("adminDto", adminDto);
-               redirectAttributes.addFlashAttribute("message", "Register successfully!");
            } else {
                model.addAttribute("adminDto", adminDto);
-               redirectAttributes.addFlashAttribute("message", "Passwords are not the same!");
-               System.out.println("password not same");
                session.setAttribute("message", "Passwords are not the same!");
-               return "redirect:/register";
-
+               return "register";
            }
        } catch (Exception e) {
-            redirectAttributes.addFlashAttribute("message", "Can't register because of the server error!");
+           e.printStackTrace();
+           model.addAttribute("errors", "The server has been wrong!");
        }
-        return "redirect:/register";
+        return "register";
     }
 }
